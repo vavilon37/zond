@@ -120,7 +120,7 @@ async def grant_manual(message: Message, config: Config, marzban: MarzbanClient,
         return
     plan = get_plan(parts[2])
     if not plan:
-        await message.answer(f"План не найден. Доступные: 1m, 3m, 6m")
+        await message.answer("План не найден. Доступные: 1m")
         return
 
     mz_user = await grant_or_extend(tg_id, None, plan, marzban)

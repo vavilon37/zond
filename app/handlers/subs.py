@@ -53,6 +53,7 @@ async def my_subs(message: Message, marzban: MarzbanClient, state: FSMContext) -
         f"{status_emoji} {status_text}\n"
         f"📅 Действует до: <b>{expire_str}</b>\n"
         f"📊 Использовано: {used_gb:.2f} GB\n\n"
-        f"🔗 Ссылка-подписка:\n<code>{sub_url}</code>"
+        f"🔗 Ссылка-подписка для <b>HAPP</b>:\n<code>{sub_url}</code>\n\n"
+        f"Инструкция по установке — кнопка «❓ Помощь»."
     )
     await message.answer(text, reply_markup=main_menu())

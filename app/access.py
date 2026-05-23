@@ -47,7 +47,8 @@ def format_subscription_message(mz_user: dict, marzban: MarzbanClient, header: s
     return (
         f"{header}\n\n"
         f"📅 Действует до: <b>{expire_str}</b>\n\n"
-        f"🔗 Ссылка-подписка (импортируй в клиент):\n"
+        f"🔗 Твоя ссылка-подписка:\n"
         f"<code>{sub_url}</code>\n\n"
-        f"📱 Клиенты: <b>Hiddify</b>, <b>v2rayTun</b>, <b>Streisand</b>"
+        f"📱 Установи приложение <b>HAPP</b> и импортируй ссылку выше.\n"
+        f"Подробная инструкция — кнопка «❓ Помощь»."
     )
