@@ -56,7 +56,6 @@ async def pay_crypto(cb: CallbackQuery, cryptobot: CryptoBotClient) -> None:
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💳 Оплатить", url=invoice["pay_url"])],
         [InlineKeyboardButton(text="🔄 Проверить оплату", callback_data=f"check_crypto:{order_id}")],
-        [InlineKeyboardButton(text="◀ Отмена", callback_data="back_main")],
     ])
     await cb.message.edit_text(text, reply_markup=kb)
     await cb.answer()

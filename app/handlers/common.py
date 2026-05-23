@@ -1,12 +1,12 @@
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import Message
 from sqlalchemy import select
 
 from ..access import format_subscription_message, grant_days
 from ..db import session
-from ..keyboards import main_menu
+from ..keyboards import BTN_HELP, main_menu
 from ..marzban import MarzbanClient
 from ..models import User
 from ..plans import REFERRAL_BONUS_DAYS, TRIAL_DAYS
@@ -18,7 +18,21 @@ WELCOME = (
     "🔐 VLESS + Reality — обход DPI, маскировка под TLS\n"
     "🌍 Сервер в Нидерландах\n"
     "🚀 100 Mbit/s, безлимитный трафик\n\n"
-    "Выбери действие:"
+    "Используй кнопки внизу 👇"
+)
+
+HELP_TEXT = (
+    "ℹ <b>Как пользоваться</b>\n\n"
+    "1. Получи пробные дни (автоматом при /start)\n"
+    "2. Или купи подписку — 1 месяц за 200₽\n"
+    "3. Получи ссылку-подписку\n"
+    "4. Поставь клиент: <b>Hiddify</b> / <b>v2rayTun</b> / <b>Streisand</b>\n"
+    "5. В клиенте: «Добавить из URL» → вставь ссылку\n"
+    "6. Подключайся\n\n"
+    "🎁 <b>Бонусы:</b>\n"
+    "• Приглашай друзей — по +3 дня вам обоим\n"
+    "• Промокод <code>zondvpn</code> — 7 бесплатных дней\n\n"
+    "Вопросы — пиши админу."
 )
 
 
@@ -38,7 +52,14 @@ def _parse_referrer(args: str | None, self_tg_id: int) -> int | None:
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject, marzban: MarzbanClient, bot: Bot) -> None:
+async def cmd_start(
+    message: Message,
+    command: CommandObject,
+    marzban: MarzbanClient,
+    bot: Bot,
+    state: FSMContext,
+) -> None:
+    await state.clear()
     tg_id = message.from_user.id
     tg_username = message.from_user.username
     referrer_tg_id = _parse_referrer(command.args, tg_id)
@@ -91,8 +112,8 @@ async def cmd_start(message: Message, command: CommandObject, marzban: MarzbanCl
         if valid_referrer:
             try:
                 ref_mz = await grant_days(valid_referrer, None, REFERRAL_BONUS_DAYS, marzban)
-                ref_expire_ts = ref_mz.get("expire") or 0
                 from datetime import datetime as _dt
+                ref_expire_ts = ref_mz.get("expire") or 0
                 ref_expire_str = (
                     _dt.fromtimestamp(ref_expire_ts).strftime("%Y-%m-%d")
                     if ref_expire_ts else "бессрочно"
@@ -109,27 +130,7 @@ async def cmd_start(message: Message, command: CommandObject, marzban: MarzbanCl
     await message.answer(WELCOME, reply_markup=main_menu())
 
 
-@router.callback_query(F.data == "back_main")
-async def back_main(cb: CallbackQuery, state: FSMContext) -> None:
+@router.message(F.text == BTN_HELP)
+async def help_handler(message: Message, state: FSMContext) -> None:
     await state.clear()
-    await cb.message.edit_text(WELCOME, reply_markup=main_menu())
-    await cb.answer()
-
-
-@router.callback_query(F.data == "help")
-async def help_cb(cb: CallbackQuery) -> None:
-    text = (
-        "ℹ <b>Как пользоваться</b>\n\n"
-        "1. Получи пробные дни (автоматом при /start)\n"
-        "2. Или купи подписку — 1 месяц за 200₽\n"
-        "3. Получи ссылку-подписку\n"
-        "4. Поставь клиент: <b>Hiddify</b> / <b>v2rayTun</b> / <b>Streisand</b>\n"
-        "5. В клиенте: «Добавить из URL» → вставь ссылку\n"
-        "6. Подключайся\n\n"
-        f"🎁 <b>Бонусы:</b>\n"
-        f"• Приглашай друзей — по +3 дня вам обоим\n"
-        f"• Промокод <code>zondvpn</code> — 7 бесплатных дней\n\n"
-        "Вопросы — пиши админу."
-    )
-    await cb.message.edit_text(text, reply_markup=main_menu())
-    await cb.answer()
+    await message.answer(HELP_TEXT, reply_markup=main_menu())

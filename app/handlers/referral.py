@@ -1,18 +1,20 @@
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 from sqlalchemy import func, select
 
 from ..db import session
-from ..keyboards import back_main_kb
+from ..keyboards import BTN_REFER, main_menu
 from ..models import User
 from ..plans import REFERRAL_BONUS_DAYS, TRIAL_DAYS
 
 router = Router()
 
 
-@router.callback_query(F.data == "refer")
-async def show_refer(cb: CallbackQuery, bot_username: str) -> None:
-    tg_id = cb.from_user.id
+@router.message(F.text == BTN_REFER)
+async def show_refer(message: Message, bot_username: str, state: FSMContext) -> None:
+    await state.clear()
+    tg_id = message.from_user.id
 
     async with session() as s:
         invited_count = (await s.execute(
@@ -31,5 +33,4 @@ async def show_refer(cb: CallbackQuery, bot_username: str) -> None:
         f"<code>{ref_link}</code>\n\n"
         f"👥 Приглашено: <b>{invited_count}</b>"
     )
-    await cb.message.edit_text(text, reply_markup=back_main_kb())
-    await cb.answer()
+    await message.answer(text, reply_markup=main_menu())

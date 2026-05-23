@@ -47,7 +47,6 @@ async def pay_sbp(cb: CallbackQuery, config: Config) -> None:
     )
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Я оплатил", callback_data=f"sbp_paid:{order_id}")],
-        [InlineKeyboardButton(text="◀ Отмена", callback_data="back_main")],
     ])
     await cb.message.edit_text(text, reply_markup=kb)
     await cb.answer()

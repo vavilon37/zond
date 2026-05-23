@@ -1,33 +1,38 @@
 from datetime import datetime
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.fsm.context import FSMContext
+from aiogram.types import Message
 from sqlalchemy import select
 
 from ..db import session
+from ..keyboards import BTN_SUBS, main_menu
 from ..marzban import MarzbanClient
 from ..models import User
 
 router = Router()
 
 
-@router.callback_query(F.data == "my_subs")
-async def my_subs(cb: CallbackQuery, marzban: MarzbanClient) -> None:
+@router.message(F.text == BTN_SUBS)
+async def my_subs(message: Message, marzban: MarzbanClient, state: FSMContext) -> None:
+    await state.clear()
+
     async with session() as s:
-        user = (await s.execute(select(User).where(User.tg_id == cb.from_user.id))).scalar_one_or_none()
+        user = (await s.execute(select(User).where(User.tg_id == message.from_user.id))).scalar_one_or_none()
 
     if not user:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Купить", callback_data="buy")],
-            [InlineKeyboardButton(text="◀ Назад", callback_data="back_main")],
-        ])
-        await cb.message.edit_text("У тебя пока нет подписок.", reply_markup=kb)
-        await cb.answer()
+        await message.answer(
+            "У тебя пока нет подписок. Жми «🛒 Купить VPN».",
+            reply_markup=main_menu(),
+        )
         return
 
     mz_user = await marzban.get_user(user.marzban_username)
     if not mz_user:
-        await cb.answer("Подписка не найдена в Marzban — напиши админу", show_alert=True)
+        await message.answer(
+            "Подписка не найдена на сервере — напиши админу.",
+            reply_markup=main_menu(),
+        )
         return
 
     expire_ts = mz_user.get("expire") or 0
@@ -50,9 +55,4 @@ async def my_subs(cb: CallbackQuery, marzban: MarzbanClient) -> None:
         f"📊 Использовано: {used_gb:.2f} GB\n\n"
         f"🔗 Ссылка-подписка:\n<code>{sub_url}</code>"
     )
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Продлить", callback_data="buy")],
-        [InlineKeyboardButton(text="◀ В меню", callback_data="back_main")],
-    ])
-    await cb.message.edit_text(text, reply_markup=kb)
-    await cb.answer()
+    await message.answer(text, reply_markup=main_menu())

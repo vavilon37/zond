@@ -1,16 +1,17 @@
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
 
-from ..keyboards import payment_methods_kb, plans_kb
+from ..keyboards import BTN_BUY, payment_methods_kb, plans_kb
 from ..plans import get_plan
 
 router = Router()
 
 
-@router.callback_query(F.data == "buy")
-async def show_plans(cb: CallbackQuery) -> None:
-    await cb.message.edit_text("Выбери тариф:", reply_markup=plans_kb())
-    await cb.answer()
+@router.message(F.text == BTN_BUY)
+async def show_plans(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    await message.answer("Выбери тариф:", reply_markup=plans_kb())
 
 
 @router.callback_query(F.data.startswith("choose_plan:"))

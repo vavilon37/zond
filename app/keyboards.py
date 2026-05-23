@@ -1,16 +1,31 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
 
 from .plans import PLANS
 
+BTN_BUY = "🛒 Купить VPN"
+BTN_SUBS = "📋 Моя подписка"
+BTN_REFER = "🎁 Пригласить друга"
+BTN_PROMO = "🎟 Промокод"
+BTN_HELP = "❓ Помощь"
 
-def main_menu() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Купить VPN", callback_data="buy")],
-        [InlineKeyboardButton(text="📋 Моя подписка", callback_data="my_subs")],
-        [InlineKeyboardButton(text="🎁 Пригласить друга", callback_data="refer")],
-        [InlineKeyboardButton(text="🎟 Промокод", callback_data="enter_promo")],
-        [InlineKeyboardButton(text="❓ Помощь", callback_data="help")],
-    ])
+MENU_TEXTS = {BTN_BUY, BTN_SUBS, BTN_REFER, BTN_PROMO, BTN_HELP}
+
+
+def main_menu() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BTN_BUY)],
+            [KeyboardButton(text=BTN_SUBS), KeyboardButton(text=BTN_REFER)],
+            [KeyboardButton(text=BTN_PROMO), KeyboardButton(text=BTN_HELP)],
+        ],
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 def plans_kb() -> InlineKeyboardMarkup:
@@ -19,7 +34,6 @@ def plans_kb() -> InlineKeyboardMarkup:
                               callback_data=f"choose_plan:{p.id}")]
         for p in PLANS
     ]
-    rows.append([InlineKeyboardButton(text="◀ Назад", callback_data="back_main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -27,7 +41,6 @@ def payment_methods_kb(plan_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="💎 Крипта (USDT)", callback_data=f"pay_crypto:{plan_id}")],
         [InlineKeyboardButton(text="🏦 СБП (рубли)", callback_data=f"pay_sbp:{plan_id}")],
-        [InlineKeyboardButton(text="◀ Назад", callback_data="buy")],
     ])
 
 
@@ -35,10 +48,4 @@ def admin_sbp_kb(order_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"admin_sbp_ok:{order_id}"),
         InlineKeyboardButton(text="❌ Отклонить", callback_data=f"admin_sbp_no:{order_id}"),
-    ]])
-
-
-def back_main_kb() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text="◀ В меню", callback_data="back_main"),
     ]])
