@@ -12,7 +12,9 @@ class MarzbanClient:
         self.inbound_tag = inbound_tag
         self._token: Optional[str] = None
         self._token_expires: float = 0.0
-        self._client = httpx.AsyncClient(verify=True, timeout=20)
+        # retries=3 покрывает транзитные DNS/connect-сбои на bothost
+        transport = httpx.AsyncHTTPTransport(retries=3, verify=True)
+        self._client = httpx.AsyncClient(transport=transport, timeout=20)
 
     async def close(self) -> None:
         await self._client.aclose()

@@ -58,15 +58,26 @@ async def receive_promo(message: Message, state: FSMContext, marzban: MarzbanCli
                 reply_markup=main_menu(),
             )
             return
+
+    try:
+        mz_user = await grant_days(
+            message.from_user.id, message.from_user.username, bonus_days, marzban
+        )
+    except Exception as e:
+        log.exception("Marzban grant failed for promo")
+        await message.answer(
+            f"⚠ Временная ошибка ({type(e).__name__}). Попробуй через минуту.",
+            reply_markup=main_menu(),
+        )
+        return
+
+    async with session() as s:
         s.add(PromoUse(tg_id=message.from_user.id, code=code))
         try:
             await s.commit()
         except IntegrityError:
             await s.rollback()
-            await message.answer("⚠ Промокод уже использован.", reply_markup=main_menu())
-            return
 
-    mz_user = await grant_days(message.from_user.id, message.from_user.username, bonus_days, marzban)
     await message.answer(
         format_subscription_message(
             mz_user, marzban,

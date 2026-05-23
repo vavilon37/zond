@@ -5,7 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import func, select
 
-from ..access import format_subscription_message, grant_or_extend
+from ..access import format_subscription_message, grant_days, grant_or_extend
 from ..config import Config
 from ..db import session
 from ..keyboards import admin_sbp_kb
@@ -49,7 +49,8 @@ async def admin_root(message: Message, config: Config) -> None:
         f"<b>Команды:</b>\n"
         f"/pending — заявки СБП на подтверждение\n"
         f"/orders — последние 10 заказов\n"
-        f"/grant &lt;tg_id&gt; &lt;plan_id&gt; — выдать вручную"
+        f"/grant &lt;tg_id&gt; &lt;plan_id&gt; — выдать вручную (план: 1m)\n"
+        f"/days &lt;tg_id&gt; &lt;days&gt; — выдать N дней (напр. при сбое промо)"
     )
     await message.answer(text)
 
@@ -129,6 +130,36 @@ async def grant_manual(message: Message, config: Config, marzban: MarzbanClient,
         await message.answer(f"✅ Выдано юзеру <code>{tg_id}</code>, план {plan.title}")
     except Exception as e:
         await message.answer(f"Доступ выдан, но не смог уведомить юзера: {e}")
+
+
+@router.message(Command("days"))
+async def grant_days_cmd(message: Message, config: Config, marzban: MarzbanClient, bot: Bot) -> None:
+    if not is_admin(message.from_user.id, config):
+        return
+    parts = (message.text or "").split()
+    if len(parts) != 3:
+        await message.answer("Использование: /days &lt;tg_id&gt; &lt;days&gt;\nНапример: /days 123456789 7")
+        return
+    try:
+        tg_id = int(parts[1])
+        days = int(parts[2])
+    except ValueError:
+        await message.answer("tg_id и days должны быть числами")
+        return
+    if days <= 0:
+        await message.answer("days должно быть положительным")
+        return
+
+    mz_user = await grant_days(tg_id, None, days, marzban)
+    text = format_subscription_message(
+        mz_user, marzban,
+        header=f"🎁 Тебе начислено <b>+{days} дней</b> (вручную админом)",
+    )
+    try:
+        await bot.send_message(tg_id, text)
+        await message.answer(f"✅ Выдано <code>{tg_id}</code>: +{days} дней")
+    except Exception as e:
+        await message.answer(f"Дни выданы, но не смог уведомить юзера: {e}")
 
 
 @router.callback_query(F.data.startswith("admin_sbp_ok:"))
