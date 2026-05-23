@@ -1,4 +1,7 @@
+import logging
+
 from aiogram import F, Router
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -13,6 +16,7 @@ from ..models import PromoUse
 from ..promos import get_promo_days
 
 router = Router()
+log = logging.getLogger(__name__)
 
 
 class PromoStates(StatesGroup):
@@ -22,6 +26,7 @@ class PromoStates(StatesGroup):
 @router.callback_query(F.data == "enter_promo")
 async def ask_promo(cb: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(PromoStates.waiting_code)
+    log.info("Promo state set for user %s", cb.from_user.id)
     await cb.message.edit_text(
         "🎟 <b>Промокод</b>\n\nОтправь промокод сообщением:",
         reply_markup=back_main_kb(),
@@ -29,9 +34,10 @@ async def ask_promo(cb: CallbackQuery, state: FSMContext) -> None:
     await cb.answer()
 
 
-@router.message(PromoStates.waiting_code)
+@router.message(StateFilter(PromoStates.waiting_code))
 async def receive_promo(message: Message, state: FSMContext, marzban: MarzbanClient) -> None:
     code = (message.text or "").strip().lower()
+    log.info("Promo input from %s: '%s'", message.from_user.id, code)
     await state.clear()
 
     bonus_days = get_promo_days(code)
