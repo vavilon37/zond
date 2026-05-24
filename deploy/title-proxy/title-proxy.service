@@ -5,7 +5,7 @@ Requires=docker.service
 
 [Service]
 Type=simple
-ExecStart=/opt/title-proxy/venv/bin/python /opt/title-proxy/main.py
+ExecStart=/opt/title-proxy/venv/bin/python /opt/title-proxy/proxy.py
 Restart=on-failure
 RestartSec=5
 User=root
