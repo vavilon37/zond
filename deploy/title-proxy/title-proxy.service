@@ -1,0 +1,15 @@
+[Unit]
+Description=Zond VPN title proxy (dynamic profile-title for Marzban /sub)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/opt/title-proxy/venv/bin/python /opt/title-proxy/main.py
+Restart=on-failure
+RestartSec=5
+User=root
+WorkingDirectory=/opt/title-proxy
+
+[Install]
+WantedBy=multi-user.target
