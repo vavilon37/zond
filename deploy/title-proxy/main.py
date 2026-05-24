@@ -16,11 +16,14 @@ def days_left_label(expire_ts: int) -> str:
     seconds_left = expire_ts - now
     days = seconds_left // 86400
     hours = (seconds_left % 86400) // 3600
+    minutes = (seconds_left % 3600) // 60
     if days > 0:
-        return f"{days}д"
+        return f"{days}д {hours}ч"
     if hours > 0:
         return f"{hours}ч"
-    return "<1ч"
+    if minutes > 0:
+        return f"{minutes}мин"
+    return "<1мин"
 
 
 async def handle_sub(request: web.Request) -> web.Response:
