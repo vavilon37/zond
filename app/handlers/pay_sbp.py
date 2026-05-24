@@ -82,7 +82,7 @@ async def sbp_paid(cb: CallbackQuery, bot: Bot, config: Config) -> None:
                 pass
 
     await cb.message.edit_text(
-        "⏳ Заявка отправлена админу.\n"
+        "⏳ Заявка отправлена админу @yodealer.\n"
         "Когда платёж подтвердят — пришлю сюда ссылку-подписку.\n"
         "Обычно — в течение часа."
     )

@@ -153,7 +153,7 @@ async def grant_days_cmd(message: Message, config: Config, marzban: MarzbanClien
     mz_user = await grant_days(tg_id, None, days, marzban)
     text = format_subscription_message(
         mz_user, marzban,
-        header=f"🎁 Тебе начислено <b>+{days} дней</b> (вручную админом)",
+        header=f"🎁 Тебе начислено <b>+{days} дней</b> (вручную от @yodealer)",
     )
     try:
         await bot.send_message(tg_id, text)
@@ -220,7 +220,7 @@ async def admin_sbp_no(cb: CallbackQuery, bot: Bot, config: Config) -> None:
         await bot.send_message(
             tg_id,
             f"❌ Заказ #{order_id} отклонён — оплата не найдена. "
-            f"Если уверен что платил — напиши админу."
+            f"Если уверен что платил — напиши @yodealer."
         )
     except Exception:
         pass

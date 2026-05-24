@@ -30,7 +30,7 @@ async def my_subs(message: Message, marzban: MarzbanClient, state: FSMContext) -
     mz_user = await marzban.get_user(user.marzban_username)
     if not mz_user:
         await message.answer(
-            "Подписка не найдена на сервере — напиши админу.",
+            "Подписка не найдена на сервере — напиши @yodealer.",
             reply_markup=main_menu(),
         )
         return
