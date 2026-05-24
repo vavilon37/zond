@@ -1,8 +1,11 @@
+import logging
+from datetime import datetime
+
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandObject, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from ..access import format_subscription_message, grant_days
 from ..db import session
@@ -12,6 +15,7 @@ from ..models import User
 from ..plans import REFERRAL_BONUS_DAYS, TRIAL_DAYS
 
 router = Router()
+log = logging.getLogger(__name__)
 
 WELCOME = (
     "👋 <b>Zond VPN</b>\n\n"
@@ -89,6 +93,30 @@ def _parse_referrer(args: str | None, self_tg_id: int) -> int | None:
     return ref_id
 
 
+async def _try_claim_trial(tg_id: int) -> bool:
+    """
+    Atomically claim the trial for this user.
+    Returns True if we just claimed it (caller must grant in Marzban).
+    Returns False if it was already claimed by another caller / earlier session.
+    """
+    async with session() as s:
+        res = await s.execute(
+            update(User)
+            .where(User.tg_id == tg_id, User.trial_granted == False)  # noqa: E712
+            .values(trial_granted=True)
+        )
+        await s.commit()
+        return res.rowcount == 1
+
+
+async def _rollback_trial(tg_id: int) -> None:
+    async with session() as s:
+        await s.execute(
+            update(User).where(User.tg_id == tg_id).values(trial_granted=False)
+        )
+        await s.commit()
+
+
 @router.message(CommandStart())
 async def cmd_start(
     message: Message,
@@ -102,6 +130,7 @@ async def cmd_start(
     tg_username = message.from_user.username
     referrer_tg_id = _parse_referrer(command.args, tg_id)
 
+    # Step 1: ensure user exists in our DB
     async with session() as s:
         user = (await s.execute(select(User).where(User.tg_id == tg_id))).scalar_one_or_none()
         is_new = user is None
@@ -128,14 +157,26 @@ async def cmd_start(
         else:
             valid_referrer = user.referrer_tg_id
 
-        grant_trial_now = not user.trial_granted
-        if grant_trial_now:
-            user.trial_granted = True
-            await s.commit()
+    # Step 2: try to atomically claim the trial. Only one concurrent /start wins.
+    if user.trial_granted:
+        grant_trial_now = False
+    else:
+        grant_trial_now = await _try_claim_trial(tg_id)
 
+    # Step 3: if we won the claim — actually grant in Marzban. Roll back on failure.
     if grant_trial_now:
         days = TRIAL_DAYS + (REFERRAL_BONUS_DAYS if valid_referrer else 0)
-        mz_user = await grant_days(tg_id, tg_username, days, marzban)
+        try:
+            mz_user = await grant_days(tg_id, tg_username, days, marzban)
+        except Exception:
+            log.exception("Trial grant in Marzban failed, rolling back trial_granted")
+            await _rollback_trial(tg_id)
+            await message.answer(
+                "⚠ Временно не могу выдать пробный период — VPN-сервер недоступен. "
+                "Попробуй /start ещё раз через минуту.",
+                reply_markup=main_menu(),
+            )
+            return
 
         if valid_referrer:
             header = (
@@ -150,10 +191,9 @@ async def cmd_start(
         if valid_referrer:
             try:
                 ref_mz = await grant_days(valid_referrer, None, REFERRAL_BONUS_DAYS, marzban)
-                from datetime import datetime as _dt
                 ref_expire_ts = ref_mz.get("expire") or 0
                 ref_expire_str = (
-                    _dt.fromtimestamp(ref_expire_ts).strftime("%Y-%m-%d")
+                    datetime.fromtimestamp(ref_expire_ts).strftime("%Y-%m-%d")
                     if ref_expire_ts else "бессрочно"
                 )
                 await bot.send_message(
@@ -163,7 +203,7 @@ async def cmd_start(
                     f"📅 Подписка теперь до: <b>{ref_expire_str}</b>"
                 )
             except Exception:
-                pass
+                log.exception("Referral bonus failed for %s", valid_referrer)
 
     await message.answer(WELCOME, reply_markup=main_menu())
 

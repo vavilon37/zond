@@ -8,6 +8,8 @@ from aiohttp import ClientSession, ClientTimeout, web
 MARZBAN_URL = "http://127.0.0.1:8001"
 TITLE_BASE = "Zond VPN"
 
+SESSION_KEY = "mz_session"
+
 
 def days_left_label(expire_ts: int) -> str:
     now = int(time.time())
@@ -27,6 +29,7 @@ def days_left_label(expire_ts: int) -> str:
 
 
 async def handle_sub(request: web.Request) -> web.Response:
+    session: ClientSession = request.app[SESSION_KEY]
     rest = request.match_info["rest"]
     upstream_url = f"{MARZBAN_URL}/sub/{rest}"
     if request.query_string:
@@ -37,11 +40,10 @@ async def handle_sub(request: web.Request) -> web.Response:
         if k.lower() not in ("host", "content-length")
     }
 
-    async with ClientSession(timeout=ClientTimeout(total=15)) as session:
-        async with session.get(upstream_url, headers=forward_headers, allow_redirects=False) as r:
-            content = await r.read()
-            response_headers = dict(r.headers)
-            status = r.status
+    async with session.get(upstream_url, headers=forward_headers, allow_redirects=False) as r:
+        content = await r.read()
+        response_headers = dict(r.headers)
+        status = r.status
 
     userinfo = response_headers.get("subscription-userinfo", "")
     m = re.search(r"expire=(\d+)", userinfo)
@@ -60,8 +62,18 @@ async def handle_sub(request: web.Request) -> web.Response:
     return web.Response(body=content, status=status, headers=response_headers)
 
 
-def main():
+async def _on_startup(app: web.Application) -> None:
+    app[SESSION_KEY] = ClientSession(timeout=ClientTimeout(total=15))
+
+
+async def _on_cleanup(app: web.Application) -> None:
+    await app[SESSION_KEY].close()
+
+
+def main() -> None:
     app = web.Application()
+    app.on_startup.append(_on_startup)
+    app.on_cleanup.append(_on_cleanup)
     app.router.add_route("GET", "/sub/{rest:.*}", handle_sub)
     web.run_app(app, host="127.0.0.1", port=8002, access_log=None)
 

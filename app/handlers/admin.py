@@ -1,9 +1,10 @@
+import logging
 from datetime import datetime
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from ..access import format_subscription_message, grant_days, grant_or_extend
 from ..config import Config
@@ -14,10 +15,33 @@ from ..models import Order, User
 from ..plans import get_plan
 
 router = Router()
+log = logging.getLogger(__name__)
 
 
 def is_admin(uid: int, config: Config) -> bool:
     return uid in config.admin_ids
+
+
+async def _claim_sbp_order(order_id: int) -> bool:
+    """Atomically move SBP order pending → paid. Returns True if claimed."""
+    async with session() as s:
+        res = await s.execute(
+            update(Order)
+            .where(Order.id == order_id, Order.status == "pending")
+            .values(status="paid", paid_at=datetime.utcnow())
+        )
+        await s.commit()
+        return res.rowcount == 1
+
+
+async def _rollback_sbp_order(order_id: int) -> None:
+    async with session() as s:
+        await s.execute(
+            update(Order)
+            .where(Order.id == order_id)
+            .values(status="pending", paid_at=None)
+        )
+        await s.commit()
 
 
 @router.message(Command("admin"))
@@ -169,27 +193,40 @@ async def admin_sbp_ok(cb: CallbackQuery, bot: Bot, config: Config, marzban: Mar
         return
     order_id = int(cb.data.split(":", 1)[1])
 
-    async with session() as s:
-        order = (await s.execute(select(Order).where(Order.id == order_id))).scalar_one_or_none()
-        if not order or order.status != "pending":
-            await cb.answer("Заказ уже обработан", show_alert=True)
-            return
-        order.status = "paid"
-        order.paid_at = datetime.utcnow()
-        tg_id = order.tg_id
-        plan_id = order.plan_id
-        await s.commit()
-
-    plan = get_plan(plan_id)
-    if not plan:
-        await cb.answer("План не найден в коде, проверь plans.py", show_alert=True)
+    # Atomic claim — только один админ-клик может подтвердить
+    if not await _claim_sbp_order(order_id):
+        await cb.answer("Заказ уже обработан", show_alert=True)
         return
 
-    mz_user = await grant_or_extend(tg_id, None, plan, marzban)
+    # Re-fetch для получения tg_id и plan_id
+    async with session() as s:
+        order = (await s.execute(select(Order).where(Order.id == order_id))).scalar_one_or_none()
+    if not order:
+        await _rollback_sbp_order(order_id)
+        await cb.answer("Заказ не найден", show_alert=True)
+        return
+
+    plan = get_plan(order.plan_id)
+    if not plan:
+        await _rollback_sbp_order(order_id)
+        await cb.answer("План не найден в plans.py", show_alert=True)
+        return
+
     try:
-        await bot.send_message(tg_id, format_subscription_message(mz_user, marzban))
+        mz_user = await grant_or_extend(order.tg_id, None, plan, marzban)
+    except Exception as e:
+        log.exception("Marzban grant failed for SBP order %s", order_id)
+        await _rollback_sbp_order(order_id)
+        await cb.answer(
+            f"VPN-сервер недоступен ({type(e).__name__}). Попробуй подтвердить ещё раз через минуту.",
+            show_alert=True,
+        )
+        return
+
+    try:
+        await bot.send_message(order.tg_id, format_subscription_message(mz_user, marzban))
     except Exception:
-        pass
+        log.exception("Failed to notify user %s about SBP confirmation", order.tg_id)
 
     await cb.message.edit_text(
         (cb.message.html_text or cb.message.text) + "\n\n✅ <b>Подтверждено, доступ выдан.</b>"

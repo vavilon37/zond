@@ -6,6 +6,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
+from app.cleanup import cleanup_loop
 from app.config import load_config
 from app.cryptobot import CryptoBotClient
 from app.db import create_tables, init_db
@@ -47,11 +48,18 @@ async def main() -> None:
     for r in ROUTERS:
         dp.include_router(r)
 
+    cleanup_task = asyncio.create_task(cleanup_loop())
+
     try:
         await bot.delete_webhook(drop_pending_updates=True)
         logging.info("Bot started as @%s", bot_username)
         await dp.start_polling(bot)
     finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
         await marzban.close()
         await cryptobot.close()
         await bot.session.close()
