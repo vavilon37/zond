@@ -1,7 +1,9 @@
+import asyncio
 import logging
 from datetime import datetime
 
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import func, select, update
@@ -13,6 +15,14 @@ from ..keyboards import admin_sbp_kb
 from ..marzban import MarzbanClient
 from ..models import Order, User
 from ..plans import get_plan
+
+REVIVE_MESSAGE_HEADER = (
+    "🚀 <b>ZondVPN снова работает!</b>\n\n"
+    "Мы переехали на новый сервер в Германии, всё переписали под чистый xray-core "
+    "и подняли резервный канал через Cloudflare. Reality стабилен, обходит DPI.\n\n"
+    "В качестве компенсации — <b>+5 дней</b> подписки за счёт заведения. "
+    "Просто обнови подписку в HAPP — конфиг и новый сервер подтянется сам."
+)
 
 router = Router()
 log = logging.getLogger(__name__)
@@ -74,7 +84,8 @@ async def admin_root(message: Message, config: Config) -> None:
         f"/pending — заявки СБП на подтверждение\n"
         f"/orders — последние 10 заказов\n"
         f"/grant &lt;tg_id&gt; &lt;plan_id&gt; — выдать вручную (план: 1m)\n"
-        f"/days &lt;tg_id&gt; &lt;days&gt; — выдать N дней (напр. при сбое промо)"
+        f"/days &lt;tg_id&gt; &lt;days&gt; — выдать N дней (напр. при сбое промо)\n"
+        f"/revive — массовая рассылка +5д всем юзерам в БД (после переезда сервера)"
     )
     await message.answer(text)
 
@@ -184,6 +195,87 @@ async def grant_days_cmd(message: Message, config: Config, marzban: MarzbanClien
         await message.answer(f"✅ Выдано <code>{tg_id}</code>: +{days} дней")
     except Exception as e:
         await message.answer(f"Дни выданы, но не смог уведомить юзера: {e}")
+
+
+@router.message(Command("revive"))
+async def revive_broadcast(message: Message, config: Config, marzban: MarzbanClient, bot: Bot) -> None:
+    """Mass-grant +5 days to every user in the DB and DM them the new sub link.
+
+    Used once when the VPN comes back up after a server migration. Idempotent
+    per-user: ``grant_days`` extends from current expire (or now, whichever is
+    later) so re-running adds another 5 days. Run it twice and complain.
+    """
+    if not is_admin(message.from_user.id, config):
+        return
+    async with session() as s:
+        users = (await s.execute(select(User).order_by(User.created_at))).scalars().all()
+
+    if not users:
+        await message.answer("В БД нет ни одного юзера для рассылки.")
+        return
+
+    await message.answer(
+        f"📣 Запускаю /revive для <b>{len(users)}</b> юзеров. +5 дней каждому."
+    )
+
+    sent = 0
+    granted_only = 0
+    blocked = 0
+    failed_grant = 0
+    progress_msg = await message.answer("⏳ Прогресс: 0 / ?")
+
+    for i, user in enumerate(users, 1):
+        # 1. extend in 3X-UI
+        try:
+            mz_user = await grant_days(user.tg_id, user.username, 5, marzban)
+        except Exception:
+            log.exception("revive: grant failed for tg=%s", user.tg_id)
+            failed_grant += 1
+            continue
+
+        # 2. DM the user
+        text = format_subscription_message(mz_user, marzban, header=REVIVE_MESSAGE_HEADER)
+        try:
+            await bot.send_message(user.tg_id, text)
+            sent += 1
+        except TelegramRetryAfter as e:
+            await asyncio.sleep(e.retry_after + 1)
+            try:
+                await bot.send_message(user.tg_id, text)
+                sent += 1
+            except Exception:
+                granted_only += 1
+        except Exception as e:
+            # most common: user blocked the bot
+            if "blocked" in str(e).lower() or "forbidden" in str(e).lower():
+                blocked += 1
+            else:
+                log.exception("revive: send failed for tg=%s", user.tg_id)
+                granted_only += 1
+
+        # rate limit ~25 msg/sec to stay under Telegram's 30/sec
+        await asyncio.sleep(0.05)
+
+        # progress every 10 users
+        if i % 10 == 0 or i == len(users):
+            try:
+                await progress_msg.edit_text(
+                    f"⏳ Прогресс: {i} / {len(users)}\n"
+                    f"✅ Отправлено: {sent}\n"
+                    f"🔇 Выдано, но не отправлено (блок/ошибка): {granted_only + blocked}\n"
+                    f"❌ Не удалось выдать: {failed_grant}"
+                )
+            except Exception:
+                pass
+
+    await message.answer(
+        f"🏁 /revive завершён.\n\n"
+        f"👥 Всего юзеров: <b>{len(users)}</b>\n"
+        f"✅ Уведомлено: <b>{sent}</b>\n"
+        f"🚫 Блокировали бота: <b>{blocked}</b>\n"
+        f"🔇 Прочие ошибки отправки (доступ всё равно продлён): <b>{granted_only}</b>\n"
+        f"❌ Не удалось выдать в xray: <b>{failed_grant}</b>"
+    )
 
 
 @router.callback_query(F.data.startswith("admin_sbp_ok:"))

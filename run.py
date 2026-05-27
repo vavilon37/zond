@@ -11,7 +11,7 @@ from app.config import load_config
 from app.cryptobot import CryptoBotClient
 from app.db import create_tables, init_db
 from app.handlers import ROUTERS
-from app.marzban import MarzbanClient
+from app.xui import XuiClient
 
 
 async def main() -> None:
@@ -28,11 +28,13 @@ async def main() -> None:
         token=config.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    marzban = MarzbanClient(
-        url=config.marzban_url,
-        username=config.marzban_username,
-        password=config.marzban_password,
-        inbound_tag=config.marzban_inbound_tag,
+    xui = XuiClient(
+        url=config.xui_url,
+        base_path=config.xui_base_path,
+        api_token=config.xui_api_token,
+        inbound_id=config.xui_inbound_id,
+        sub_base_url=config.xui_sub_base_url,
+        sub_path=config.xui_sub_path,
     )
     cryptobot = CryptoBotClient(token=config.cryptobot_token)
 
@@ -41,7 +43,7 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
     dp["config"] = config
-    dp["marzban"] = marzban
+    dp["marzban"] = xui  # handlers still call it "marzban" via DI key
     dp["cryptobot"] = cryptobot
     dp["bot_username"] = bot_username
 
@@ -60,7 +62,7 @@ async def main() -> None:
             await cleanup_task
         except asyncio.CancelledError:
             pass
-        await marzban.close()
+        await xui.close()
         await cryptobot.close()
         await bot.session.close()
 

@@ -9,14 +9,19 @@ load_dotenv()
 class Config:
     bot_token: str
     admin_ids: list[int]
-    marzban_url: str
-    marzban_username: str
-    marzban_password: str
-    marzban_inbound_tag: str
+    # 3X-UI panel
+    xui_url: str
+    xui_base_path: str
+    xui_api_token: str
+    xui_inbound_id: int
+    xui_sub_base_url: str
+    xui_sub_path: str
+    # Payments
     cryptobot_token: str
     sbp_phone: str
     sbp_bank: str
     sbp_name: str
+    # Storage
     db_path: str
 
 
@@ -26,10 +31,12 @@ def load_config() -> Config:
     return Config(
         bot_token=os.environ["BOT_TOKEN"],
         admin_ids=admin_ids,
-        marzban_url=os.environ["MARZBAN_URL"].rstrip("/"),
-        marzban_username=os.environ["MARZBAN_USERNAME"],
-        marzban_password=os.environ["MARZBAN_PASSWORD"],
-        marzban_inbound_tag=os.environ.get("MARZBAN_INBOUND_TAG", "VLESS Reality"),
+        xui_url=os.environ["XUI_URL"].rstrip("/"),
+        xui_base_path=os.environ["XUI_BASE_PATH"],
+        xui_api_token=os.environ["XUI_API_TOKEN"],
+        xui_inbound_id=int(os.environ.get("XUI_INBOUND_ID", "1")),
+        xui_sub_base_url=os.environ["XUI_SUB_BASE_URL"].rstrip("/"),
+        xui_sub_path=os.environ["XUI_SUB_PATH"],
         cryptobot_token=os.environ["CRYPTOBOT_TOKEN"],
         sbp_phone=os.environ.get("SBP_PHONE", ""),
         sbp_bank=os.environ.get("SBP_BANK", ""),
